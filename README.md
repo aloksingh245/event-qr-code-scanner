@@ -6,12 +6,13 @@ A modern, full-stack event registration and attendance verification system built
 
 ## 🚀 Key Features
 
-*   **Secure Registrant Self-Service:** Quick registration workflow with built-in duplicate detection and event capacity enforcement.
+*   **Attendee Registration & Login:** Direct event entry workflow with built-in duplicate detection and event capacity enforcement.
 *   **OTP Email Verification:** Verifies the registrant's email via a 6-digit OTP before generating and sending the ticket.
 *   **Dynamic QR Tickets:** Automatically generates a high-resolution QR ticket containing a non-guessable UUID v4 token, delivered instantly as an embedded inline image in the email.
 *   **Opaque QR Protocol:** No security credentials (JWTs or secrets) are embedded inside the QR payload, preventing forge-and-leak attacks.
 *   **Atomic Duplicate Prevention:** Uses MongoDB's atomic `findOneAndUpdate` queries to prevent double-entry fraud at the gates.
-*   **Real-time Admin Dashboard:** Instantly tracks entry rates and scanner statistics using WebSockets (Socket.IO).
+*   **Real-time Organizer Dashboard:** Instantly tracks entry rates and scanner statistics using WebSockets (Socket.IO).
+*   **Organizer Portal:** Dedicated Organizer Login for coordinators to access ticket verification and gate scanner tools.
 *   **Manual Gate Check-in:** Administrative fallback option to search and check in guests using their email in case of broken phone screens.
 
 ---
