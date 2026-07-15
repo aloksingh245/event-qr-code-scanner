@@ -19,6 +19,7 @@ const ScannerPage = () => {
 
   const cameraScannerRef = useRef(null);
   const isMountedRef = useRef(true);
+  const videoStreamRef = useRef(null);
 
   // Manage component lifecycle mounting state
   useEffect(() => {
@@ -102,7 +103,7 @@ const ScannerPage = () => {
       await scanner.start(
         cameraId,
         {
-          fps: 15,
+          fps: 5,
           qrbox: (width, height) => {
             const minSize = Math.min(width, height);
             const boxSize = Math.floor(minSize * 0.7); // Dynamic sizing: 70% of viewport
@@ -112,6 +113,12 @@ const ScannerPage = () => {
         onCameraScanSuccess,
         onCameraScanFailure
       );
+
+      // Store the stream reference for robust cleanup even if unmounted later
+      const videoEl = document.querySelector("#camera-reader video");
+      if (videoEl && videoEl.srcObject) {
+        videoStreamRef.current = videoEl.srcObject;
+      }
 
       if (!isMountedRef.current) {
         console.log("Component unmounted during scanner startup. Shutting down.");
@@ -131,15 +138,24 @@ const ScannerPage = () => {
   };
 
   const stopCamera = async () => {
-    // 1. Manually stop the tracks via the video element's srcObject if possible
+    // 1. Manually stop the tracks via the stored stream reference (highly robust when unmounted)
     try {
+      if (videoStreamRef.current && typeof videoStreamRef.current.getTracks === 'function') {
+        videoStreamRef.current.getTracks().forEach(track => {
+          track.stop();
+          console.log("Successfully stopped camera track manually from stored stream ref:", track.label);
+        });
+        videoStreamRef.current = null;
+      }
+
+      // Fallback: try to find it in the DOM in case start was super fast or reference was missed
       const videoEl = document.querySelector("#camera-reader video");
       if (videoEl && videoEl.srcObject) {
         const stream = videoEl.srcObject;
         if (stream && typeof stream.getTracks === 'function') {
           stream.getTracks().forEach(track => {
             track.stop();
-            console.log("Successfully stopped camera track manually:", track.label);
+            console.log("Successfully stopped camera track manually from DOM:", track.label);
           });
         }
       }
@@ -401,7 +417,7 @@ const ScannerPage = () => {
       <div className="bg-white p-5 rounded-2xl shadow-md border border-gray-100 mb-6 overflow-hidden min-h-[340px] flex flex-col justify-center">
         {/* Camera Tab Content */}
         <div className={activeTab === 'camera' ? "block" : "hidden"}>
-          <div className="relative">
+          <div className="relative overflow-hidden rounded-xl">
             {cameraError && (
               <div className="mb-4 bg-red-50 text-red-700 border border-red-200 p-4 rounded-xl text-xs font-medium flex items-center gap-3">
                 <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
@@ -427,6 +443,39 @@ const ScannerPage = () => {
             {cameraActive && (
               <div className="absolute top-3 right-3 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse z-10">
                 Live Feed
+              </div>
+            )}
+
+            {/* Success Overlay over the camera scanner */}
+            {scanResult && scanResult.type === 'success' && (
+              <div className="absolute inset-0 bg-green-600/95 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20 p-6 text-center animate-fade-in transition-all duration-300">
+                <div className="bg-white/20 p-4 rounded-full mb-3 animate-bounce">
+                  <Check className="w-16 h-16 text-white stroke-[3px]" />
+                </div>
+                <h3 className="text-2xl font-bold tracking-wider uppercase">Ticket Scanned</h3>
+                <p className="text-sm font-medium opacity-90 mt-1 max-w-md">{scanResult.message}</p>
+              </div>
+            )}
+
+            {/* Warning Overlay over the camera scanner */}
+            {scanResult && scanResult.type === 'warning' && (
+              <div className="absolute inset-0 bg-yellow-500/95 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20 p-6 text-center animate-fade-in transition-all duration-300">
+                <div className="bg-white/20 p-4 rounded-full mb-3 animate-pulse">
+                  <AlertTriangle className="w-16 h-16 text-white stroke-[2.5px]" />
+                </div>
+                <h3 className="text-2xl font-bold tracking-wider uppercase">{scanResult.title}</h3>
+                <p className="text-sm font-medium opacity-90 mt-1 max-w-md">{scanResult.message}</p>
+              </div>
+            )}
+
+            {/* Error Overlay over the camera scanner */}
+            {scanResult && scanResult.type === 'error' && (
+              <div className="absolute inset-0 bg-red-600/95 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20 p-6 text-center animate-fade-in transition-all duration-300">
+                <div className="bg-white/20 p-4 rounded-full mb-3 animate-pulse">
+                  <XCircle className="w-16 h-16 text-white stroke-[2.5px]" />
+                </div>
+                <h3 className="text-2xl font-bold tracking-wider uppercase">{scanResult.title}</h3>
+                <p className="text-sm font-medium opacity-90 mt-1 max-w-md">{scanResult.message}</p>
               </div>
             )}
           </div>
@@ -492,8 +541,8 @@ const ScannerPage = () => {
         </div>
       )}
 
-      {/* Result Display Banner */}
-      {scanResult && (
+      {/* Result Display Banner (Only for file & manual tabs) */}
+      {scanResult && activeTab !== 'camera' && (
         <div className={`p-5 rounded-2xl border transition-all ${
           scanResult.type === 'success' ? 'bg-green-50 border-green-200 text-green-900 shadow-sm' :
           scanResult.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-900 shadow-sm' :
