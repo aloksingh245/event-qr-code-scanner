@@ -13,6 +13,9 @@ if (process.env.NODE_ENV !== 'test') {
 
 const app = express();
 
+// Trust the proxy (Render reverse proxy) to retrieve correct client IPs for rate-limiting
+app.set('trust proxy', 1);
+
 // Rate limiter for authentication routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
