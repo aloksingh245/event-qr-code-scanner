@@ -2,6 +2,11 @@
 
 A modern, full-stack event registration and attendance verification system built for small-to-mid events (up to 300 attendees). The system provides secure user registration with OTP validation, instant digital ticket delivery containing a non-guessable QR code, gate-side camera scanning with atomic duplicate entry prevention, a real-time tracking dashboard, and administrative tools.
 
+### 🌐 Live Demo
+
+- **Frontend:** [https://event-qr-code-scanner-7y2vadtzh.vercel.app](https://event-qr-code-scanner-7y2vadtzh.vercel.app)
+- **Backend API:** [https://event-qr-code-scanner-backend.onrender.com](https://event-qr-code-scanner-backend.onrender.com)
+
 ---
 
 ## 🚀 Key Features
