@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import api from '../services/api';
 import { CheckCircle, XCircle, AlertTriangle, Camera, UploadCloud, Check } from 'lucide-react';
@@ -14,22 +14,46 @@ const ScannerPage = () => {
   const [loading, setLoading] = useState(false);
   const [manualEmail, setManualEmail] = useState('');
 
+  const isProcessingRef = useRef(false);
+  const lastScannedQrRef = useRef({ id: '', time: 0 });
+
   // Camera scan success handler
   const onCameraScanSuccess = async (decodedText) => {
-    if (loading) return;
+    if (isProcessingRef.current || loading) return;
+
+    // Parse the QR code to extract its ID
+    let qrCodeId = '';
+    try {
+      const payload = JSON.parse(decodedText);
+      qrCodeId = payload.qrCodeId || decodedText;
+    } catch (e) {
+      qrCodeId = decodedText.trim();
+    }
+
+    const now = Date.now();
+    // If the QR code is the same as the last scanned one, and within the 8 second cooldown, ignore it
+    if (lastScannedQrRef.current.id === qrCodeId && now - lastScannedQrRef.current.time < 8000) {
+      console.log("Ignoring repeat scan of the same QR code within cooldown window.");
+      return;
+    }
+
+    // Set lock states immediately
+    isProcessingRef.current = true;
+    lastScannedQrRef.current = { id: qrCodeId, time: now };
     
     // Pause immediately to prevent spam scanning
     await pauseScanner();
 
     await processVerification(decodedText);
 
-    // Auto-resume camera after 4 seconds
+    // Auto-resume camera after 3 seconds
     setTimeout(() => {
       if (isMounted.current) {
         setScanResult(null);
         resumeScanner();
       }
-    }, 4000);
+      isProcessingRef.current = false;
+    }, 3000);
   };
 
   const onCameraScanFailure = () => {

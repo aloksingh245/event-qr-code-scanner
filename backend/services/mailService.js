@@ -16,6 +16,8 @@ const sendQREmail = async (email, name, eventName, qrImageBase64) => {
   try {
     const transporter = createTransporter();
 
+    const qrRawBase64 = qrImageBase64.split(';base64,').pop();
+
     const mailOptions = {
       from: `"🎟️ Alok Events" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -65,7 +67,9 @@ const sendQREmail = async (email, name, eventName, qrImageBase64) => {
       attachments: [
         {
           filename: 'ticket-qr.png',
-          path: qrImageBase64,
+          content: qrRawBase64,
+          encoding: 'base64',
+          contentType: 'image/png',
           cid: 'qrcode-ticket'
         }
       ]
