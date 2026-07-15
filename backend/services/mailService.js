@@ -16,7 +16,7 @@ const generateQRHtmlTable = (qrPayload) => {
   const size = modules.size;        // e.g. 29, 33, etc.
   const data = modules.data;        // Uint8Array — 1 = dark, 0 = light
   const cellSize = 8;               // px per module — larger for reliable scanning
-  const quietZone = 4;              // white border modules around QR (spec requires ≥4)
+  const quietZone = 2;              // white border modules (wrapper div padding adds more)
   const totalSize = size + quietZone * 2;
 
   const trStyle = `style="line-height:0;font-size:0;height:${cellSize}px;mso-line-height-rule:exactly;"`;
@@ -69,7 +69,7 @@ const sendQREmail = async (email, name, eventName, qrCodeId) => {
       subject: `🎉 Get Ready! Here is your Ticket for ${eventName}`,
       htmlContent: `
         <div style="background-color: #0d0a1b; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center;">
-          <div style="max-width: 500px; margin: 0 auto; background: #161233; border: 2px solid #ff007f; border-radius: 24px; padding: 35px; box-shadow: 0 10px 30px rgba(255, 0, 127, 0.25);">
+          <div style="max-width: 600px; margin: 0 auto; background: #161233; border: 2px solid #ff007f; border-radius: 24px; padding: 35px; box-shadow: 0 10px 30px rgba(255, 0, 127, 0.25);">
             
             <!-- Funky Header -->
             <h1 style="color: #00f0ff; margin-top: 0; font-size: 28px; letter-spacing: 1px; text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);">
@@ -81,14 +81,14 @@ const sendQREmail = async (email, name, eventName, qrCodeId) => {
             </p>
             
             <!-- Ticket Card Box -->
-            <div style="background-color: #0d0a1b; border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 16px; padding: 25px; margin: 25px 0; display: inline-block; width: 85%;">
+            <div style="background-color: #0d0a1b; border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 16px; padding: 25px; margin: 25px 0;">
               <span style="color: #a0aec0; font-size: 11px; font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">
                 SCAN AT ENTRY GATES
               </span>
               
               <div style="margin: 20px 0;">
                 <!-- QR Code rendered as a pure HTML table — works in ALL email clients -->
-                <div style="display:inline-block; padding: 10px; background-color: #ffffff; border: 4px solid #ff007f; border-radius: 12px; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);">
+                <div style="display:inline-block; padding: 14px; background-color: #ffffff; border: 4px solid #ff007f; border-radius: 12px; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);">
                   ${qrHtmlTable}
                 </div>
               </div>
