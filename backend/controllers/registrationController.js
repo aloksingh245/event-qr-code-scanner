@@ -175,10 +175,12 @@ const resendQR = async (req, res) => {
 // @access  Public
 const getQRImage = async (req, res) => {
   const { qrCodeId } = req.params;
+  console.log(`🔍 Serve QR request received for ID: ${qrCodeId}`);
 
   try {
     const registration = await Registration.findOne({ qrCodeId });
     if (!registration) {
+      console.warn(`⚠️ Ticket not found in DB for ID: ${qrCodeId}`);
       return res.status(404).json({ message: 'Ticket not found' });
     }
 
