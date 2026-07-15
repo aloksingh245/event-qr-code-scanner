@@ -1,72 +1,53 @@
 const request = require('supertest');
 const app = require('../server');
-const Event = require('../models/Event');
 const Registration = require('../models/Registration');
 
 describe('Registration API - Concurrency & Edge Cases', () => {
-  const testEventId = 'EVT-TEST-1';
-
-  beforeEach(async () => {
-    // Seed an event for testing
-    await Event.create({
-      eventId: testEventId,
-      eventName: 'Test Concert',
-      eventDate: new Date(),
-      location: 'Stadium',
-      organizerId: 'ORG01',
-      capacity: 5 // VERY LOW CAPACITY to test race conditions
-    });
+  beforeEach(() => {
+    process.env.EVENT_CAPACITY = '5'; // VERY LOW CAPACITY to test race conditions
   });
 
   it('1. Should register a user successfully', async () => {
     const res = await request(app)
       .post('/api/registrations')
       .send({
-        eventId: testEventId,
         name: 'John Doe',
-        email: 'john@example.com',
-        contact: '1234567890'
+        email: 'john@example.com'
       });
 
     expect(res.statusCode).toEqual(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.qrCodeId).toBeDefined();
 
     // Verify DB states
-    const event = await Event.findOne({ eventId: testEventId });
-    expect(event.registeredCount).toBe(1);
-
     const reg = await Registration.findOne({ email: 'john@example.com' });
     expect(reg).toBeTruthy();
-    expect(reg.qrCodeId).toEqual(res.body.qrCodeId);
+    expect(reg.status).toEqual('PENDING_VERIFICATION');
   });
 
   it('2. Should prevent duplicate registration for the same event', async () => {
     // First registration
     await request(app).post('/api/registrations').send({
-      eventId: testEventId, name: 'Alice', email: 'alice@example.com', contact: '111'
+      name: 'Alice', email: 'alice@example.com'
     });
+
+    // Mark registration as VALID to trigger duplicate blocking (since PENDING registrations get OTP resend)
+    await Registration.findOneAndUpdate({ email: 'alice@example.com' }, { status: 'VALID' });
 
     // Duplicate attempt
     const res = await request(app).post('/api/registrations').send({
-      eventId: testEventId, name: 'Alice 2', email: 'alice@example.com', contact: '222'
+      name: 'Alice 2', email: 'alice@example.com'
     });
 
     expect(res.statusCode).toEqual(409);
     expect(res.body.message).toMatch(/already registered/i);
-
-    const event = await Event.findOne({ eventId: testEventId });
-    expect(event.registeredCount).toBe(1); // Ensure count wasn't inflated
   });
 
   it('3. TOCTOU RACE CONDITION TEST: Should strictly enforce capacity limit under heavy concurrent load', async () => {
     // Capacity is 5. Let's fire 20 requests EXACTLY at the same time.
     const requests = Array.from({ length: 20 }).map((_, i) => {
       return request(app).post('/api/registrations').send({
-        eventId: testEventId,
         name: `User ${i}`,
-        email: `user${i}@example.com`,
-        contact: '1234567890'
+        email: `user${i}@example.com`
       });
     });
 
@@ -80,10 +61,7 @@ describe('Registration API - Concurrency & Edge Cases', () => {
     expect(failureResponses.length).toBe(15);
 
     // Verify Database state is absolutely correct
-    const event = await Event.findOne({ eventId: testEventId });
-    expect(event.registeredCount).toBe(5);
-
-    const registrations = await Registration.countDocuments({ eventId: testEventId });
-    expect(registrations).toBe(5);
+    const registrationsCount = await Registration.countDocuments({ status: { $ne: 'CANCELLED' } });
+    expect(registrationsCount).toBe(5);
   });
 });

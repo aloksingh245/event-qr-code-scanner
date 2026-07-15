@@ -1,37 +1,33 @@
 const request = require('supertest');
 const app = require('../server');
-const Event = require('../models/Event');
 const Registration = require('../models/Registration');
+const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
 describe('Scanner API - Concurrency & Edge Cases', () => {
-  const testEventId = 'EVT-TEST-SCAN';
   let scannerToken;
   let testUserQR;
 
   beforeAll(() => {
     // Setup JWT Secret for testing
     process.env.SCANNER_SECRET = 'test_secret_key';
-    scannerToken = jwt.sign({ id: 'SCANNER_01', role: 'scanner' }, process.env.SCANNER_SECRET);
   });
 
   beforeEach(async () => {
-    await Event.create({
-      eventId: testEventId,
-      eventName: 'Scan Fest',
-      eventDate: new Date(),
-      location: 'Stadium',
-      organizerId: 'ORG01',
-      capacity: 100,
-      registeredCount: 1
+    // Create a scanner user in DB for JWT authorization checks
+    const scannerUser = await User.create({
+      username: 'test_scanner',
+      password: 'password123',
+      role: 'scanner'
     });
+    
+    scannerToken = jwt.sign({ id: scannerUser._id, role: 'scanner' }, process.env.SCANNER_SECRET);
 
     const reg = await Registration.create({
-      eventId: testEventId,
       name: 'Bob',
       email: 'bob@example.com',
-      contact: '123',
-      qrCodeId: 'test-uuid-v4-bob'
+      qrCodeId: 'test-uuid-v4-bob',
+      status: 'VALID'
     });
     testUserQR = reg.qrCodeId;
   });
@@ -39,7 +35,7 @@ describe('Scanner API - Concurrency & Edge Cases', () => {
   it('1. Should deny access without valid JWT', async () => {
     const res = await request(app)
       .post('/api/scanner/verify')
-      .send({ qrCodeId: testUserQR, gateId: 'Gate 1' });
+      .send({ qrCodeId: testUserQR });
     
     expect(res.statusCode).toEqual(401);
   });
@@ -48,7 +44,7 @@ describe('Scanner API - Concurrency & Edge Cases', () => {
     const res = await request(app)
       .post('/api/scanner/verify')
       .set('Authorization', `Bearer ${scannerToken}`)
-      .send({ qrCodeId: testUserQR, gateId: 'Gate 1' });
+      .send({ qrCodeId: testUserQR });
 
     expect(res.statusCode).toEqual(200);
     expect(res.body.status).toBe('SUCCESS');
@@ -56,8 +52,7 @@ describe('Scanner API - Concurrency & Edge Cases', () => {
     // Verify DB update
     const reg = await Registration.findOne({ qrCodeId: testUserQR });
     expect(reg.scanned).toBe(true);
-    expect(reg.gateId).toBe('Gate 1');
-    expect(reg.scannerId).toBe('SCANNER_01');
+    expect(reg.scannerId).toBeDefined();
   });
 
   it('3. Should block a cancelled ticket', async () => {
@@ -67,7 +62,7 @@ describe('Scanner API - Concurrency & Edge Cases', () => {
     const res = await request(app)
       .post('/api/scanner/verify')
       .set('Authorization', `Bearer ${scannerToken}`)
-      .send({ qrCodeId: testUserQR, gateId: 'Gate 1' });
+      .send({ qrCodeId: testUserQR });
 
     expect(res.statusCode).toEqual(403);
     expect(res.body.status).toBe('CANCELLED_TICKET');
@@ -80,7 +75,7 @@ describe('Scanner API - Concurrency & Edge Cases', () => {
       return request(app)
         .post('/api/scanner/verify')
         .set('Authorization', `Bearer ${scannerToken}`)
-        .send({ qrCodeId: testUserQR, gateId: `Gate ${i}` });
+        .send({ qrCodeId: testUserQR });
     });
 
     const responses = await Promise.all(requests);

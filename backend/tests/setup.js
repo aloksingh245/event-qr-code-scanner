@@ -29,7 +29,8 @@ afterAll(async () => {
 
 // Global Mocks
 jest.mock('../services/mailService', () => ({
-  sendQREmail: jest.fn().mockResolvedValue(true) // Mock email to prevent actual sending during tests
+  sendQREmail: jest.fn().mockResolvedValue(true), // Mock email to prevent actual sending during tests
+  sendOTPEmail: jest.fn().mockResolvedValue(true)
 }));
 
 jest.mock('../services/qrService', () => ({

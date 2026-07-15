@@ -3,6 +3,9 @@ const { v4: uuidv4 } = require('uuid');
 const qrService = require('../services/qrService');
 const mailService = require('../services/mailService');
 
+// Simple Promise-based queue/lock to serialize registration checks & inserts
+let registrationLock = Promise.resolve();
+
 // @desc    Register user for the single event (Generates and sends OTP)
 // @route   POST /api/registrations
 // @access  Public
@@ -10,6 +13,14 @@ const registerUser = async (req, res) => {
   const { name, email } = req.body;
   const eventName = process.env.EVENT_NAME || "Grand Event 2026";
   const eventCapacity = parseInt(process.env.EVENT_CAPACITY) || 300;
+
+  // Acquire lock to serialize registration check and insertion
+  const currentLock = registrationLock;
+  let release;
+  registrationLock = new Promise(resolve => {
+    release = resolve;
+  });
+  await currentLock;
 
   try {
     // 1. Check if user already registered (Duplicate Check)
@@ -73,6 +84,9 @@ const registerUser = async (req, res) => {
   } catch (error) {
     console.error('Registration Error:', error);
     res.status(500).json({ message: 'Server error during registration' });
+  } finally {
+    // Always release lock
+    release();
   }
 };
 
