@@ -11,8 +11,8 @@ const sendQREmail = async (email, name, eventName, qrCodeId) => {
     const senderEmail = process.env.EMAIL_USER || 'aloksinghrajput2405@gmail.com';
     const senderName = process.env.EVENT_NAME || 'Alok Events';
 
-    // Construct public dynamic QR image URL using the backend URL
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+    // Construct public dynamic QR image URL using the backend URL (cleaning any trailing slashes)
+    const backendUrl = (process.env.BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
     const qrImageUrl = `${backendUrl}/api/registrations/qr/${qrCodeId}`;
 
     const body = {
