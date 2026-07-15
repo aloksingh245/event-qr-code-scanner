@@ -6,23 +6,34 @@ const QRCode = require('qrcode');
 /**
  * Generates a pure-HTML QR code table from raw QR matrix data.
  * Each QR module becomes a <td> with a black or white background.
- * This renders perfectly in ALL email clients — no images, no URLs needed.
+ * Includes a quiet zone (4-module white border) required by QR spec.
+ * Uses aggressive anti-gap styles to prevent email clients from
+ * inserting pixel gaps that would break scanner detection.
  */
 const generateQRHtmlTable = (qrPayload) => {
   const qr = QRCode.create(qrPayload, { errorCorrectionLevel: 'H' });
   const modules = qr.modules;
   const size = modules.size;        // e.g. 29, 33, etc.
   const data = modules.data;        // Uint8Array — 1 = dark, 0 = light
-  const cellSize = 6;               // px per module — tuned for ~200px total
+  const cellSize = 8;               // px per module — larger for reliable scanning
+  const quietZone = 4;              // white border modules around QR (spec requires ≥4)
+  const totalSize = size + quietZone * 2;
 
-  let tableHtml = `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 auto;">`;
+  const trStyle = `style="line-height:0;font-size:0;height:${cellSize}px;mso-line-height-rule:exactly;"`;
+  const tdBase = `padding:0;margin:0;line-height:0;font-size:0;border:none;mso-line-height-rule:exactly;`;
 
-  for (let row = 0; row < size; row++) {
-    tableHtml += `<tr>`;
-    for (let col = 0; col < size; col++) {
-      const isDark = data[row * size + col];
+  let tableHtml = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;border-spacing:0;margin:0 auto;mso-table-lspace:0;mso-table-rspace:0;">`;
+
+  for (let row = 0; row < totalSize; row++) {
+    tableHtml += `<tr ${trStyle}>`;
+    for (let col = 0; col < totalSize; col++) {
+      // Check if we are inside the quiet zone (white border)
+      const qrRow = row - quietZone;
+      const qrCol = col - quietZone;
+      const inQR = qrRow >= 0 && qrRow < size && qrCol >= 0 && qrCol < size;
+      const isDark = inQR && data[qrRow * size + qrCol];
       const color = isDark ? '#000000' : '#ffffff';
-      tableHtml += `<td style="width:${cellSize}px;height:${cellSize}px;background-color:${color};padding:0;margin:0;line-height:0;font-size:0;"></td>`;
+      tableHtml += `<td style="width:${cellSize}px;min-width:${cellSize}px;height:${cellSize}px;background-color:${color};${tdBase}"></td>`;
     }
     tableHtml += `</tr>`;
   }
