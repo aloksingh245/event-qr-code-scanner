@@ -1,28 +1,30 @@
-const nodemailer = require('nodemailer');
-
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: process.env.EMAIL_PORT == 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-};
+// Send transactional emails using Brevo (formerly Sendinblue) HTTP API.
+// This avoids port-blocking issues on cloud hosting providers like Render.
 
 const sendQREmail = async (email, name, eventName, qrImageBase64) => {
   try {
-    const transporter = createTransporter();
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+      throw new Error('BREVO_API_KEY is missing in environment variables');
+    }
 
     const qrRawBase64 = qrImageBase64.split(';base64,').pop();
+    const senderEmail = process.env.EMAIL_USER || 'aloksinghrajput2405@gmail.com';
+    const senderName = process.env.EVENT_NAME || 'Alok Events';
 
-    const mailOptions = {
-      from: `"🎟️ Alok Events" <${process.env.EMAIL_USER}>`,
-      to: email,
+    const body = {
+      sender: {
+        name: senderName,
+        email: senderEmail,
+      },
+      to: [
+        {
+          email: email,
+          name: name,
+        },
+      ],
       subject: `🎉 Get Ready! Here is your Ticket for ${eventName}`,
-      html: `
+      htmlContent: `
         <div style="background-color: #0d0a1b; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center;">
           <div style="max-width: 500px; margin: 0 auto; background: #161233; border: 2px solid #ff007f; border-radius: 24px; padding: 35px; box-shadow: 0 10px 30px rgba(255, 0, 127, 0.25);">
             
@@ -42,8 +44,8 @@ const sendQREmail = async (email, name, eventName, qrImageBase64) => {
               </span>
               
               <div style="margin: 20px 0;">
-                <!-- Embed via Content-ID (CID) -->
-                <img src="cid:qrcode-ticket" alt="Your Entry Ticket QR Code" style="max-width: 200px; border: 4px solid #ff007f; padding: 8px; border-radius: 12px; background-color: white; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);"/>
+                <!-- Embed via inline base64 image data -->
+                <img src="data:image/png;base64,${qrRawBase64}" alt="Your Entry Ticket QR Code" style="max-width: 200px; border: 4px solid #ff007f; padding: 8px; border-radius: 12px; background-color: white; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);"/>
               </div>
               
               <div style="color: #00f0ff; font-weight: bold; font-size: 15px; margin-top: 10px; letter-spacing: 0.5px;">
@@ -64,35 +66,61 @@ const sendQREmail = async (email, name, eventName, qrImageBase64) => {
           </div>
         </div>
       `,
-      attachments: [
+      attachment: [
         {
-          filename: 'ticket-qr.png',
+          name: 'ticket-qr.png',
           content: qrRawBase64,
-          encoding: 'base64',
-          contentType: 'image/png',
-          cid: 'qrcode-ticket'
         }
       ]
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Funky QR Email sent to ${email}: ${info.messageId}`);
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Brevo API Error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`QR Email sent to ${email} via Brevo: ${data.messageId}`);
     return true;
   } catch (error) {
-    console.error('Error sending QR email:', error);
+    console.error('Error sending QR email via Brevo:', error);
     throw error;
   }
 };
 
 const sendOTPEmail = async (email, name, eventName, otp) => {
   try {
-    const transporter = createTransporter();
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+      throw new Error('BREVO_API_KEY is missing in environment variables');
+    }
 
-    const mailOptions = {
-      from: `"⚡ Alok Events" <${process.env.EMAIL_USER}>`,
-      to: email,
+    const senderEmail = process.env.EMAIL_USER || 'aloksinghrajput2405@gmail.com';
+    const senderName = process.env.EVENT_NAME || 'Alok Events';
+
+    const body = {
+      sender: {
+        name: senderName,
+        email: senderEmail,
+      },
+      to: [
+        {
+          email: email,
+          name: name,
+        },
+      ],
       subject: `🔑 ${otp} is your verification code for ${eventName}`,
-      html: `
+      htmlContent: `
         <div style="background-color: #0d0a1b; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center;">
           <div style="max-width: 500px; margin: 0 auto; background: #161233; border: 2px solid #00f0ff; border-radius: 24px; padding: 35px; box-shadow: 0 10px 30px rgba(0, 240, 255, 0.25);">
             
@@ -128,11 +156,26 @@ const sendOTPEmail = async (email, name, eventName, otp) => {
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Funky OTP Email sent to ${email}: ${info.messageId}`);
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Brevo API Error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`OTP Email sent to ${email} via Brevo: ${data.messageId}`);
     return true;
   } catch (error) {
-    console.error('Error sending OTP email:', error);
+    console.error('Error sending OTP email via Brevo:', error);
     throw error;
   }
 };
