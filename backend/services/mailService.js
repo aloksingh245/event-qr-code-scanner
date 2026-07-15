@@ -4,41 +4,56 @@
 const QRCode = require('qrcode');
 
 /**
- * Generates a pure-HTML QR code table from raw QR matrix data.
- * Each QR module becomes a <td> with a black or white background.
- * Includes a quiet zone (4-module white border) required by QR spec.
- * Uses aggressive anti-gap styles to prevent email clients from
- * inserting pixel gaps that would break scanner detection.
+ * Generates a compact, pure-HTML QR code table from raw QR matrix data.
+ * 
+ * KEY OPTIMISATIONS (to stay under Gmail's 102 KB email clipping limit):
+ * 1. Run-length encoding — consecutive same-colour cells in a row are
+ *    merged with colspan, cutting element count by ~3×.
+ * 2. Uses HTML `bgcolor` attribute instead of verbose CSS properties.
+ * 3. Error correction M (not H) — keeps module count low while still
+ *    allowing 15 % damage recovery, which is plenty for on-screen display.
+ * 4. Minimal quiet zone in the table; the wrapper <div> padding provides
+ *    the rest of the required white margin.
  */
 const generateQRHtmlTable = (qrPayload) => {
-  const qr = QRCode.create(qrPayload, { errorCorrectionLevel: 'H' });
+  const qr = QRCode.create(qrPayload, { errorCorrectionLevel: 'M' });
   const modules = qr.modules;
-  const size = modules.size;        // e.g. 29, 33, etc.
-  const data = modules.data;        // Uint8Array — 1 = dark, 0 = light
-  const cellSize = 8;               // px per module — larger for reliable scanning
-  const quietZone = 2;              // white border modules (wrapper div padding adds more)
-  const totalSize = size + quietZone * 2;
+  const size = modules.size;
+  const data = modules.data;       // Uint8Array — 1 = dark, 0 = light
+  const px = 7;                    // pixels per module
+  const qz = 1;                    // quiet-zone modules (wrapper div adds more)
+  const total = size + qz * 2;
 
-  const trStyle = `style="line-height:0;font-size:0;height:${cellSize}px;mso-line-height-rule:exactly;"`;
-  const tdBase = `padding:0;margin:0;line-height:0;font-size:0;border:none;mso-line-height-rule:exactly;`;
+  // Helper: is the module at (row, col) dark?
+  const dark = (r, c) => {
+    const qr = r - qz, qc = c - qz;
+    return qr >= 0 && qr < size && qc >= 0 && qc < size && !!data[qr * size + qc];
+  };
 
-  let tableHtml = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;border-spacing:0;margin:0 auto;mso-table-lspace:0;mso-table-rspace:0;">`;
+  let html = '<table cellpadding="0" cellspacing="0" border="0" ' +
+    'style="border-collapse:collapse;margin:0 auto;">';
 
-  for (let row = 0; row < totalSize; row++) {
-    tableHtml += `<tr ${trStyle}>`;
-    for (let col = 0; col < totalSize; col++) {
-      // Check if we are inside the quiet zone (white border)
-      const qrRow = row - quietZone;
-      const qrCol = col - quietZone;
-      const inQR = qrRow >= 0 && qrRow < size && qrCol >= 0 && qrCol < size;
-      const isDark = inQR && data[qrRow * size + qrCol];
-      const color = isDark ? '#000000' : '#ffffff';
-      tableHtml += `<td style="width:${cellSize}px;min-width:${cellSize}px;height:${cellSize}px;background-color:${color};${tdBase}"></td>`;
+  for (let r = 0; r < total; r++) {
+    html += `<tr style="height:${px}px;line-height:${px}px;font-size:0;">`;
+    let c = 0;
+    while (c < total) {
+      const isDark = dark(r, c);
+      // Count consecutive cells of the same colour (run-length)
+      let span = 1;
+      while (c + span < total && dark(r, c + span) === isDark) span++;
+
+      const bg = isDark ? '#000' : '#fff';
+      if (span > 1) {
+        html += `<td colspan="${span}" width="${px * span}" height="${px}" bgcolor="${bg}" style="padding:0"></td>`;
+      } else {
+        html += `<td width="${px}" height="${px}" bgcolor="${bg}" style="padding:0"></td>`;
+      }
+      c += span;
     }
-    tableHtml += `</tr>`;
+    html += '</tr>';
   }
-  tableHtml += `</table>`;
-  return tableHtml;
+  html += '</table>';
+  return html;
 };
 
 const sendQREmail = async (email, name, eventName, qrCodeId) => {
