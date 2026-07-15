@@ -1,6 +1,35 @@
 // Send transactional emails using Brevo (formerly Sendinblue) HTTP API.
 // This avoids port-blocking issues on cloud hosting providers like Render.
 
+const QRCode = require('qrcode');
+
+/**
+ * Generates a pure-HTML QR code table from raw QR matrix data.
+ * Each QR module becomes a <td> with a black or white background.
+ * This renders perfectly in ALL email clients — no images, no URLs needed.
+ */
+const generateQRHtmlTable = (qrPayload) => {
+  const qr = QRCode.create(qrPayload, { errorCorrectionLevel: 'H' });
+  const modules = qr.modules;
+  const size = modules.size;        // e.g. 29, 33, etc.
+  const data = modules.data;        // Uint8Array — 1 = dark, 0 = light
+  const cellSize = 6;               // px per module — tuned for ~200px total
+
+  let tableHtml = `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 auto;">`;
+
+  for (let row = 0; row < size; row++) {
+    tableHtml += `<tr>`;
+    for (let col = 0; col < size; col++) {
+      const isDark = data[row * size + col];
+      const color = isDark ? '#000000' : '#ffffff';
+      tableHtml += `<td style="width:${cellSize}px;height:${cellSize}px;background-color:${color};padding:0;margin:0;line-height:0;font-size:0;"></td>`;
+    }
+    tableHtml += `</tr>`;
+  }
+  tableHtml += `</table>`;
+  return tableHtml;
+};
+
 const sendQREmail = async (email, name, eventName, qrCodeId) => {
   try {
     const apiKey = process.env.BREVO_API_KEY;
@@ -11,9 +40,9 @@ const sendQREmail = async (email, name, eventName, qrCodeId) => {
     const senderEmail = process.env.EMAIL_USER || 'aloksinghrajput2405@gmail.com';
     const senderName = process.env.EVENT_NAME || 'Alok Events';
 
-    // Construct public dynamic QR image URL using the backend URL (cleaning any trailing slashes)
-    const backendUrl = (process.env.BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
-    const qrImageUrl = `${backendUrl}/api/registrations/qr/${qrCodeId}`;
+    // Generate the QR code as a pure HTML table (no images needed)
+    const qrPayload = JSON.stringify({ qrCodeId });
+    const qrHtmlTable = generateQRHtmlTable(qrPayload);
 
     const body = {
       sender: {
@@ -47,8 +76,10 @@ const sendQREmail = async (email, name, eventName, qrCodeId) => {
               </span>
               
               <div style="margin: 20px 0;">
-                <!-- Dynamically load the image from the hosted backend URL -->
-                <img src="${qrImageUrl}" alt="Your Entry Ticket QR Code" style="max-width: 200px; border: 4px solid #ff007f; padding: 8px; border-radius: 12px; background-color: white; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);"/>
+                <!-- QR Code rendered as a pure HTML table — works in ALL email clients -->
+                <div style="display:inline-block; padding: 10px; background-color: #ffffff; border: 4px solid #ff007f; border-radius: 12px; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);">
+                  ${qrHtmlTable}
+                </div>
               </div>
               
               <div style="color: #00f0ff; font-weight: bold; font-size: 15px; margin-top: 10px; letter-spacing: 0.5px;">
