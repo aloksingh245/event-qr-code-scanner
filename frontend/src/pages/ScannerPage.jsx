@@ -18,6 +18,17 @@ const ScannerPage = () => {
   const [manualEmail, setManualEmail] = useState('');
 
   const cameraScannerRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  // Manage component lifecycle mounting state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopCamera();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load cameras and start scanner
   useEffect(() => {
@@ -48,6 +59,8 @@ const ScannerPage = () => {
       // 1. Request camera permissions and list cameras
       const devices = await Html5Qrcode.getCameras();
       
+      if (!isMountedRef.current) return;
+      
       if (devices && devices.length > 0) {
         setCameras(devices);
         
@@ -68,13 +81,17 @@ const ScannerPage = () => {
       }
     } catch (err) {
       console.error("Camera permissions or listing failed:", err);
-      setCameraError("Camera permission denied or camera is in use. Please allow camera access in browser settings.");
+      if (isMountedRef.current) {
+        setCameraError("Camera permission denied or camera is in use. Please allow camera access in browser settings.");
+      }
     }
   };
 
   const startCamera = async (cameraId) => {
     try {
       await stopCamera();
+
+      if (!isMountedRef.current) return;
 
       const container = document.getElementById("camera-reader");
       if (!container) return;
@@ -95,16 +112,42 @@ const ScannerPage = () => {
         onCameraScanSuccess,
         onCameraScanFailure
       );
+
+      if (!isMountedRef.current) {
+        console.log("Component unmounted during scanner startup. Shutting down.");
+        await stopCamera();
+        return;
+      }
+
       setCameraActive(true);
       setCameraError(null);
     } catch (err) {
       console.error("Failed to start camera:", err);
-      setCameraError("Failed to initiate camera stream. It might be locked by another application.");
-      setCameraActive(false);
+      if (isMountedRef.current) {
+        setCameraError("Failed to initiate camera stream. It might be locked by another application.");
+        setCameraActive(false);
+      }
     }
   };
 
   const stopCamera = async () => {
+    // 1. Manually stop the tracks via the video element's srcObject if possible
+    try {
+      const videoEl = document.querySelector("#camera-reader video");
+      if (videoEl && videoEl.srcObject) {
+        const stream = videoEl.srcObject;
+        if (stream && typeof stream.getTracks === 'function') {
+          stream.getTracks().forEach(track => {
+            track.stop();
+            console.log("Successfully stopped camera track manually:", track.label);
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error stopping tracks manually:", err);
+    }
+
+    // 2. Clear HTML5-QR Code library instances
     if (cameraScannerRef.current) {
       try {
         if (cameraScannerRef.current.isScanning) {
@@ -135,12 +178,14 @@ const ScannerPage = () => {
 
     // Auto-resume camera after 4 seconds
     setTimeout(() => {
-      setScanResult(null);
-      if (cameraScannerRef.current && cameraScannerRef.current.isScanning) {
-        try {
-          cameraScannerRef.current.resume();
-        } catch (e) {
-          console.error("Resume scan error:", e);
+      if (isMountedRef.current) {
+        setScanResult(null);
+        if (cameraScannerRef.current && cameraScannerRef.current.isScanning) {
+          try {
+            cameraScannerRef.current.resume();
+          } catch (e) {
+            console.error("Resume scan error:", e);
+          }
         }
       }
     }, 4000);
@@ -169,7 +214,9 @@ const ScannerPage = () => {
         message: 'No clear QR ticket code found in the image. Try a sharper screenshot.'
       });
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
       e.target.value = '';
     }
   };
@@ -186,28 +233,35 @@ const ScannerPage = () => {
         email: manualEmail.trim()
       });
 
-      setScanResult({
-        type: 'success',
-        title: 'Check-In Success',
-        message: `Attendee checked in successfully. Welcome!`
-      });
-      setManualEmail('');
+      if (isMountedRef.current) {
+        setScanResult({
+          type: 'success',
+          title: 'Check-In Success',
+          message: `Attendee checked in successfully. Welcome!`
+        });
+        setManualEmail('');
+      }
 
     } catch (error) {
       console.error("Manual checkin error:", error);
       const message = error.response?.data?.message || "Failed to process manual check-in.";
-      setScanResult({
-        type: 'error',
-        title: 'Manual Check-in Failed',
-        message
-      });
+      if (isMountedRef.current) {
+        setScanResult({
+          type: 'error',
+          title: 'Manual Check-in Failed',
+          message
+        });
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   const processVerification = async (decodedText) => {
     setLoading(true);
+    setScanResult(null); // Clear previous result immediately to prevent displaying/flashing old state
     try {
       // Decode flexible formats
       let qrCodeId = '';
