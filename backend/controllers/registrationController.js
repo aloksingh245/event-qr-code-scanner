@@ -130,7 +130,7 @@ const verifyOTP = async (req, res) => {
     const qrImageBase64 = await qrService.generateQR(qrPayload);
 
     // 5. Send actual Ticket Email
-    mailService.sendQREmail(email, registration.name, eventName, qrImageBase64)
+    mailService.sendQREmail(email, registration.name, eventName, registration.qrCodeId)
       .catch(err => console.error(`Failed to send QR ticket email to ${email}:`, err));
 
     res.status(200).json({
@@ -161,13 +161,7 @@ const resendQR = async (req, res) => {
     const registration = await Registration.findOne({ email, status: 'VALID' });
     
     if (registration) {
-      const qrPayload = JSON.stringify({
-        qrCodeId: registration.qrCodeId
-      });
-      
-      const qrImageBase64 = await qrService.generateQR(qrPayload);
-      
-      mailService.sendQREmail(registration.email, registration.name, eventName, qrImageBase64)
+      mailService.sendQREmail(registration.email, registration.name, eventName, registration.qrCodeId)
         .catch(err => console.error('QR Resend Email failed:', err));
     }
 
@@ -176,8 +170,40 @@ const resendQR = async (req, res) => {
   }
 };
 
+// @desc    Serve QR code image dynamically
+// @route   GET /api/registrations/qr/:qrCodeId
+// @access  Public
+const getQRImage = async (req, res) => {
+  const { qrCodeId } = req.params;
+
+  try {
+    const registration = await Registration.findOne({ qrCodeId });
+    if (!registration) {
+      return res.status(404).json({ message: 'Ticket not found' });
+    }
+
+    const qrPayload = JSON.stringify({
+      qrCodeId: registration.qrCodeId
+    });
+    
+    const qrImageBase64 = await qrService.generateQR(qrPayload);
+    const qrRawBase64 = qrImageBase64.split(';base64,').pop();
+    const imgBuffer = Buffer.from(qrRawBase64, 'base64');
+
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Content-Length': imgBuffer.length
+    });
+    res.end(imgBuffer);
+  } catch (error) {
+    console.error('Error serving QR image:', error);
+    res.status(500).json({ message: 'Error rendering ticket' });
+  }
+};
+
 module.exports = {
   registerUser,
   verifyOTP,
-  resendQR
+  resendQR,
+  getQRImage
 };

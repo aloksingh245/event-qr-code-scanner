@@ -1,16 +1,19 @@
 // Send transactional emails using Brevo (formerly Sendinblue) HTTP API.
 // This avoids port-blocking issues on cloud hosting providers like Render.
 
-const sendQREmail = async (email, name, eventName, qrImageBase64) => {
+const sendQREmail = async (email, name, eventName, qrCodeId) => {
   try {
     const apiKey = process.env.BREVO_API_KEY;
     if (!apiKey) {
       throw new Error('BREVO_API_KEY is missing in environment variables');
     }
 
-    const qrRawBase64 = qrImageBase64.split(';base64,').pop();
     const senderEmail = process.env.EMAIL_USER || 'aloksinghrajput2405@gmail.com';
     const senderName = process.env.EVENT_NAME || 'Alok Events';
+
+    // Construct public dynamic QR image URL using the backend URL
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
+    const qrImageUrl = `${backendUrl}/api/registrations/qr/${qrCodeId}`;
 
     const body = {
       sender: {
@@ -44,8 +47,8 @@ const sendQREmail = async (email, name, eventName, qrImageBase64) => {
               </span>
               
               <div style="margin: 20px 0;">
-                <!-- Embed via inline base64 image data -->
-                <img src="data:image/png;base64,${qrRawBase64}" alt="Your Entry Ticket QR Code" style="max-width: 200px; border: 4px solid #ff007f; padding: 8px; border-radius: 12px; background-color: white; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);"/>
+                <!-- Dynamically load the image from the hosted backend URL -->
+                <img src="${qrImageUrl}" alt="Your Entry Ticket QR Code" style="max-width: 200px; border: 4px solid #ff007f; padding: 8px; border-radius: 12px; background-color: white; box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);"/>
               </div>
               
               <div style="color: #00f0ff; font-weight: bold; font-size: 15px; margin-top: 10px; letter-spacing: 0.5px;">
@@ -65,13 +68,7 @@ const sendQREmail = async (email, name, eventName, qrImageBase64) => {
             
           </div>
         </div>
-      `,
-      attachment: [
-        {
-          name: 'ticket-qr.png',
-          content: qrRawBase64,
-        }
-      ]
+      `
     };
 
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
