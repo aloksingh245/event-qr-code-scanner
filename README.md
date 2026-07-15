@@ -14,6 +14,7 @@ A modern, full-stack event registration and attendance verification system built
 *   **Real-time Organizer Dashboard:** Instantly tracks entry rates and scanner statistics using WebSockets (Socket.IO).
 *   **Organizer Portal:** Dedicated Organizer Login for coordinators to access ticket verification and gate scanner tools.
 *   **Manual Gate Check-in:** Administrative fallback option to search and check in guests using their email in case of broken phone screens.
+*   **Robust Security & Rate Limiting:** Includes custom in-memory rate limiting to protect endpoints against brute-force attacks (OTP entry limits) and email spamming (registration/OTP creation throttling).
 
 ---
 
@@ -39,18 +40,22 @@ event-management-system/
 │   ├── models/                  # Database schemas (User, Registration)
 │   ├── controllers/             # Express route handler logic
 │   ├── routes/                  # Express route declarations
-│   ├── middleware/              # JWT & auth middleware
+│   ├── middleware/              # JWT, auth & rateLimiter middleware
 │   ├── services/                # QR Code generator and Nodemailer SMTP engine
-│   └── utils/                   # Socket.IO handlers
+│   ├── utils/                   # Socket.IO handlers
+│   └── tests/                   # Jest integration and unit test suites
 │
 └── frontend/                    # Client Dashboard & Registration App
     ├── index.html
+    ├── vercel.json              # Vercel SPA routing redirects
+    ├── public/
+    │   └── _redirects           # Netlify/Render SPA routing redirects
     ├── src/
     │   ├── main.jsx             # React startup script
     │   ├── App.jsx              # Client routing and component wiring
     │   ├── pages/               # Register, Login, Scanner, and Dashboard pages
     │   ├── components/          # Reuseable Navbar and Protected Routes
-    │   ├── services/            # Axios API config
+    │   ├── services/            # Axios API & Socket client configurations
     │   └── context/             # Auth provider holding scanner tokens
 ```
 
@@ -91,6 +96,27 @@ CLIENT_URL=http://localhost:5173
 ### 3. Authentication Routes (`/api/auth`)
 *   `POST /api/auth/login`: Authenticates scanner/admin accounts and issues JWT access token.
 *   `POST /api/auth/register`: (Admin only/Setup) Seeds a new scanner account.
+
+---
+
+## 🛡️ Security & Rate Limiting
+
+To secure the application against abuse, brute-force guessing, and email spamming, the backend implements multiple layers of rate-limiting middleware:
+
+*   **Registration & Resend Throttling (`registrationLimiter`)**:
+    *   **Applied to**: `POST /api/registrations` and `POST /api/registrations/qr/resend`.
+    *   **Rule**: Max 3 requests per 5 minutes per IP address.
+    *   **Purpose**: Prevents malicious actors from spamming OTP emails or overloading the SMTP server.
+*   **OTP Brute-Force Prevention (`otpVerifyLimiter`)**:
+    *   **Applied to**: `POST /api/registrations/verify-otp`.
+    *   **Rule**: Max 10 verification attempts per 5 minutes per IP address.
+    *   **Purpose**: Blocks attackers from brute-forcing the 6-digit OTP codes.
+*   **Administrative Auth Protection (`authLimiter`)**:
+    *   **Applied to**: `/api/auth/*` routes.
+    *   **Rule**: Max 20 authentication attempts per 15 minutes per IP address.
+    *   **Purpose**: Secures organizer and gate scanner credentials against dictionary attacks.
+
+*Note: All rate-limiting limits are automatically bypassed when `NODE_ENV=test` to ensure unit and integration tests run uninterrupted.*
 
 ---
 

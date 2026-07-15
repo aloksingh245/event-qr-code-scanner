@@ -19,6 +19,7 @@ graph TB
 
     subgraph API ["Backend Application Services (Node.js + Express)"]
         Router["🛣️ Express Routing Gateway"]
+        RateLimit["🛡️ Rate Limit Middleware<br>(IP-based throttling)"]
         AuthM["🔒 JWT Auth Middleware"]
         RegCtrl["📝 Registration Controller"]
         ScanCtrl["⚡ Scanner Controller"]
@@ -32,17 +33,22 @@ graph TB
 
     %% Data Flows
     UserApp -->|1. Submit email/name| Router
-    Router -->|2. Route registration| RegCtrl
-    RegCtrl -->|3. Save details & pending OTP| DB
-    RegCtrl -.->|4. Trigger Async OTP Mail| SMTPSrv
-    SMTPSrv -.->|5. Delivery| UserApp
+    Router -->|2. Apply Rate-Limits| RateLimit
+    RateLimit -->|3. Verify OTP / Save details| RegCtrl
+    RegCtrl -->|4. Save pending OTP| DB
+    RegCtrl -.->|5. Trigger Async OTP Mail| SMTPSrv
+    SMTPSrv -.->|6. Delivery| UserApp
 
-    ScanApp -->|6. Send Scanner JWT & QR UUID| AuthM
-    AuthM -->|7. Authorize access| Router
-    Router -->|8. Route verification| ScanCtrl
-    ScanCtrl -->|9. Atomic status update| DB
-    ScanCtrl -->|10. Emit scan status| SocketSrv
-    SocketSrv -.->|11. Real-time broadcast| DashApp
+    ScanApp -->|7. Organizer Auth Login| Router
+    Router -->|8. Apply Auth Rate-Limits| RateLimit
+    RateLimit -->|9. Verify Credentials & Issue JWT| ScanCtrl
+    
+    ScanApp -->|10. Send QR Code UUID + JWT| AuthM
+    AuthM -->|11. Verify Scanner Token| Router
+    Router -->|12. Route verification (No rate limit)| ScanCtrl
+    ScanCtrl -->|13. Atomic status update| DB
+    ScanCtrl -->|14. Emit scan status| SocketSrv
+    SocketSrv -.->|15. Real-time broadcast| DashApp
 
     %% Styles
     classDef clientStyle fill:#1e1b4b,stroke:#00f0ff,stroke-width:2px,color:#e2e8f0;
@@ -50,7 +56,7 @@ graph TB
     classDef extStyle fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#e2e8f0;
 
     class UserApp,ScanApp,DashApp clientStyle;
-    class Router,AuthM,RegCtrl,ScanCtrl,SocketSrv apiStyle;
+    class Router,RateLimit,AuthM,RegCtrl,ScanCtrl,SocketSrv apiStyle;
     class SMTPSrv,DB extStyle;
 ```
 
