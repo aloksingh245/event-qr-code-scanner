@@ -45,7 +45,7 @@ graph TB
     
     ScanApp -->|10. Send QR Code UUID + JWT| AuthM
     AuthM -->|11. Verify Scanner Token| Router
-    Router -->|12. Route verification (No rate limit)| ScanCtrl
+    Router -->|12. Route verification - No rate limit| ScanCtrl
     ScanCtrl -->|13. Atomic status update| DB
     ScanCtrl -->|14. Emit scan status| SocketSrv
     SocketSrv -.->|15. Real-time broadcast| DashApp
