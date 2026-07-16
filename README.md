@@ -2,18 +2,16 @@
 
 A modern, full-stack event registration and attendance verification system built for small-to-mid events (up to 300 attendees). The system provides secure user registration with OTP validation, instant digital ticket delivery containing a non-guessable QR code, gate-side camera scanning with atomic duplicate entry prevention, a real-time tracking dashboard, and administrative tools.
 
-### 🌐 Live Demo
-
-- **Frontend:** [https://event-qr-code-scanner-7y2vadtzh.vercel.app](https://event-qr-code-scanner-7y2vadtzh.vercel.app)
-- **Backend API:** [https://event-qr-code-scanner-backend.onrender.com](https://event-qr-code-scanner-backend.onrender.com)
-
----
-
 ## 🚀 Key Features
 
 *   **Attendee Registration & Login:** Direct event entry workflow with built-in duplicate detection and event capacity enforcement.
 *   **OTP Email Verification:** Verifies the registrant's email via a 6-digit OTP before generating and sending the ticket.
-*   **Dynamic QR Tickets:** Automatically generates a high-resolution QR ticket containing a non-guessable UUID v4 token, delivered instantly as an embedded inline image in the email.
+*   **Inline HTML QR Tickets:** Renders QR tickets inside emails as pure, lightweight HTML `<table>` elements with zero image dependencies. This bypasses email client image-blocking rules and works flawlessly offline.
+*   **Gmail Clipping Prevention (1D RLE):** Uses a 1D Run-Length Encoding (RLE) algorithm to compress the HTML table (merging adjacent same-color modules using `colspan`), reducing total email size to ~48 KB (safely below Gmail's 102 KB clipping limit).
+*   **Scanner Readability Optimizations:** Implements anti-gap table CSS hacks (`border-collapse`, `font-size:0`, `line-height:7px`), a 1-module quiet-zone, and high contrast styling to ensure immediate scanning by mobile camera readers.
+*   **Dual Ticket Delivery:** Automatically attaches a high-resolution `.png` file (`ticket-qr.png`) alongside the inline HTML code for local backup.
+*   **Brevo Email API Integration:** Leverages Brevo's HTTPS transactional mail REST API, completely eliminating port-blocking issues commonly encountered with traditional SMTP on cloud hosting platforms like Render.
+*   **Dynamic QR Serving Endpoint:** Exposes a secure, public endpoint (`GET /api/registrations/qr/:qrCodeId`) to serve high-resolution PNG QR images on-demand.
 *   **Opaque QR Protocol:** No security credentials (JWTs or secrets) are embedded inside the QR payload, preventing forge-and-leak attacks.
 *   **Atomic Duplicate Prevention:** Uses MongoDB's atomic `findOneAndUpdate` queries to prevent double-entry fraud at the gates.
 *   **Real-time Organizer Dashboard:** Instantly tracks entry rates and scanner statistics using WebSockets (Socket.IO).
@@ -26,7 +24,7 @@ A modern, full-stack event registration and attendance verification system built
 ## 🛠️ Tech Stack
 
 *   **Frontend:** React 18, Vite, Tailwind CSS, Axios, React Router, Socket.io-client, React-QR-Reader (or HTML5-QR-Code)
-*   **Backend:** Node.js, Express.js, Socket.IO, Nodemailer, UUID, BcryptJS, JWT
+*   **Backend:** Node.js, Express.js, Socket.IO, Brevo HTTPS Email API, Node-Fetch, UUID, BcryptJS, JWT
 *   **Database:** MongoDB, Mongoose
 
 ---
@@ -46,7 +44,8 @@ event-management-system/
 │   ├── controllers/             # Express route handler logic
 │   ├── routes/                  # Express route declarations
 │   ├── middleware/              # JWT, auth & rateLimiter middleware
-│   ├── services/                # QR Code generator and Nodemailer SMTP engine
+│   ├── services/                # QR Code generator and Brevo Email API service
+│   ├── scripts/                 # Utility scripts (e.g. test-qr-html.js)
 │   ├── utils/                   # Socket.IO handlers
 │   └── tests/                   # Jest integration and unit test suites
 │
@@ -77,10 +76,8 @@ JWT_SECRET=your_super_secret_jwt_key
 SCANNER_SECRET=your_scanner_auth_secret_key
 EVENT_NAME="Grand Event 2026"
 EVENT_CAPACITY=300
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASS=your-gmail-app-password
+BREVO_API_KEY=your_brevo_api_key_here
+EMAIL_USER=aloksinghrajput2405@gmail.com
 CLIENT_URL=http://localhost:5173
 ```
 
@@ -92,6 +89,7 @@ CLIENT_URL=http://localhost:5173
 *   `POST /api/registrations`: Starts registration, triggers an OTP verification email.
 *   `POST /api/registrations/verify-otp`: Confirms OTP, marks registration status as `VALID`, generates ticket, and emails the QR code.
 *   `POST /api/registrations/qr/resend`: Re-sends the QR code ticket to a registered and verified email.
+*   `GET /api/registrations/qr/:qrCodeId`: Public endpoint to serve the dynamic PNG QR code ticket.
 
 ### 2. Scanner & Admin Routes (`/api/scanner`)
 *   `POST /api/scanner/verify`: (Protected - Scanner JWT) Scans and atomic-updates attendee scan status. Broadcasts real-time count.

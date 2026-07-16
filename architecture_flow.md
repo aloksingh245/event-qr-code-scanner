@@ -27,7 +27,7 @@ graph TB
     end
 
     subgraph External ["External Integrations"]
-        SMTPSrv["📧 SMTP Email Relay<br>(Nodemailer / Gmail)"]
+        BrevoAPI["🌐 Brevo HTTPS API<br>(Transactional Mail Service)"]
         DB[(💾 MongoDB Database)]
     end
 
@@ -36,8 +36,8 @@ graph TB
     Router -->|2. Apply Rate-Limits| RateLimit
     RateLimit -->|3. Verify OTP / Save details| RegCtrl
     RegCtrl -->|4. Save pending OTP| DB
-    RegCtrl -.->|5. Trigger Async OTP Mail| SMTPSrv
-    SMTPSrv -.->|6. Delivery| UserApp
+    RegCtrl -.->|5. Trigger Async OTP/QR Mail via HTTPS| BrevoAPI
+    BrevoAPI -.->|6. Delivery| UserApp
 
     ScanApp -->|7. Organizer Auth Login| Router
     Router -->|8. Apply Auth Rate-Limits| RateLimit
@@ -57,7 +57,7 @@ graph TB
 
     class UserApp,ScanApp,DashApp clientStyle;
     class Router,RateLimit,AuthM,RegCtrl,ScanCtrl,SocketSrv apiStyle;
-    class SMTPSrv,DB extStyle;
+    class BrevoAPI,DB extStyle;
 ```
 
 ---
@@ -171,4 +171,29 @@ sequenceDiagram
         API-->>Gate: 409/400 Error (Duplicate entry / Unverified account)
         Gate-->>Att: "Entry denied. Ticket already checked in."
     end
+```
+
+---
+
+## 5. Inline HTML QR Table Generation with Run-Length Encoding (RLE)
+
+This flowchart illustrates how raw QR matrix data is compressed into a lightweight HTML `<table>` representation using 1D Run-Length Encoding (RLE) to stay under the 102 KB Gmail clipping threshold.
+
+```mermaid
+flowchart TD
+    Start([1. Generate QR Matrix from uuid-v4]) --> GetModules[2. Extract grid modules:<br>1 = Dark, 0 = Light]
+    GetModules --> InitTable[3. Initialize HTML Table<br>border-collapse, line-height, margin]
+    InitTable --> LoopRows[4. Loop through each row<br>including quiet zones]
+    LoopRows --> ScanCols[5. Scan columns sequentially in row]
+    ScanCols --> FindRun{6. Next cell has same color?}
+    FindRun -- Yes --> Increment[7. Increment span counter]
+    Increment --> FindRun
+    FindRun -- No --> CreateCell[8. Create TD element<br>bgcolor and colspan = span]
+    CreateCell --> ResetSpan[9. Reset span to 1]
+    ResetSpan --> CheckEnd{10. End of row reached?}
+    CheckEnd -- No --> ScanCols
+    CheckEnd -- Yes --> CloseRow[11. Close TR row element]
+    CloseRow --> CheckAllRows{12. All rows completed?}
+    CheckAllRows -- No --> LoopRows
+    CheckAllRows -- Yes --> Finish[13. Output compressed HTML Table:<br>~3-5 KB table, ~48 KB total email]
 ```
